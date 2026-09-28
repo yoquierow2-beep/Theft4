@@ -15,35 +15,44 @@ jobs:
 
       - name: Install Theft4 dependencies
         run: |
-          python3 tools/setup_repo.py
           python3 tools/setup_repo.py --check
 
       - name: Clone XeniOS
         run: |
           git clone --depth 1 --branch xenios https://github.com/xenios-jp/XeniOS.git ../XeniOS
 
-      - name: Setup XeniOS data
+      - name: Initialize XeniOS submodules
+        run: |
+          cd ../XeniOS
+          git submodule sync --recursive
+          git submodule update --init --recursive --depth 1
+
+      - name: Fetch XeniOS data
         run: |
           cd ../XeniOS
           python3 xenia-build.py fetchdata
 
-      - name: Configure XeniOS for iOS
+      - name: Configure XeniOS iOS
         run: |
           cd ../XeniOS
-          python3 - <<'PY'
-          import sys
-          sys.path.insert(0, ".")
-          import xenia_build
 
-          result = xenia_build.run_ios_xcode_configure()
+          cmake \
+            -S . \
+            -B build-ios-xcode \
+            -G Xcode \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_SYSTEM_PROCESSOR=arm64 \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+            -DXENIA_ENABLE_IOS_MOLTENVK=ON \
+            -DCMAKE_CONFIGURATION_TYPES="Checked;Debug;Release" \
+            -DCMAKE_XCODE_GENERATE_SCHEME=ON
 
-          if result != 0:
-              raise SystemExit(result)
-          PY
-
-      - name: Build XeniOS iOS
+      - name: Build XeniOS iOS Release
         run: |
           cd ../XeniOS
+
           xcodebuild \
             -project build-ios-xcode/xenia.xcodeproj \
             -scheme xenia-app \
@@ -54,7 +63,8 @@ jobs:
 
       - name: Find XeniOS libraries
         run: |
-          echo "BUSCANDO LIBRERIAS..."
+          echo "===== LIBRERIAS ENCONTRADAS ====="
+
           find ../XeniOS -type f \( \
             -name "libMoltenVK.a" -o \
             -name "libMoltenVK_ShaderConverter.a" -o \
@@ -63,7 +73,7 @@ jobs:
             -name "libSPIRV-Tools.a" \
           \) -print
 
-      - name: Prepare Theft4 XeniOS libraries
+      - name: Prepare Theft4 dependencies
         run: |
           mkdir -p ../XeniOS/build-ios-xcode/obj/iOS/Release
 
@@ -82,9 +92,9 @@ jobs:
           find ../XeniOS -type f -name "libSPIRV-Tools.a" \
             -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
 
-      - name: Check XeniOS libraries
+      - name: Check Theft4 dependencies
         run: |
-          ls -lh ../XeniOS/build-ios-xcode/obj/iOS/Release/
+          echo "===== COMPROBANDO LAS 5 LIBRERIAS ====="
 
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libMoltenVK.a
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libMoltenVK_ShaderConverter.a
@@ -92,7 +102,10 @@ jobs:
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libspirv-cross.a
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libSPIRV-Tools.a
 
-      - name: Build Theft4 Release IPA
+          echo "===== LAS 5 LIBRERIAS ESTAN ====="
+          ls -lh ../XeniOS/build-ios-xcode/obj/iOS/Release/
+
+      - name: Build Theft4 IPA
         run: |
           chmod +x tools/build_ios_release.sh
           ./tools/build_ios_release.sh
