@@ -22,30 +22,39 @@ jobs:
         run: |
           git clone --depth 1 --branch xenios https://github.com/xenios-jp/XeniOS.git ../XeniOS
 
-      - name: Show XeniOS files
-        run: |
-          echo "=== XeniOS ==="
-          find ../XeniOS -maxdepth 4 -type f \( \
-            -name "libMoltenVK.a" -o \
-            -name "libMoltenVK_ShaderConverter.a" -o \
-            -name "libMoltenVK_Common.a" -o \
-            -name "libspirv-cross.a" -o \
-            -name "libSPIRV-Tools.a" \
-          \) -print
-
-      - name: Configure XeniOS iOS build
+      - name: Setup XeniOS data
         run: |
           cd ../XeniOS
-          python3 xenia-build.py setup --target-arch arm64 --target-os ios
+          python3 xenia-build.py fetchdata
 
-      - name: Build XeniOS iOS dependencies
+      - name: Configure XeniOS for iOS
         run: |
           cd ../XeniOS
-          python3 xenia-build.py build --target-arch arm64 --target-os ios --config Release
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, ".")
+          import xenia_build
 
-      - name: Locate XeniOS libraries
+          result = xenia_build.run_ios_xcode_configure()
+
+          if result != 0:
+              raise SystemExit(result)
+          PY
+
+      - name: Build XeniOS iOS
         run: |
-          echo "=== Searching for required libraries ==="
+          cd ../XeniOS
+          xcodebuild \
+            -project build-ios-xcode/xenia.xcodeproj \
+            -scheme xenia-app \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Find XeniOS libraries
+        run: |
+          echo "BUSCANDO LIBRERIAS..."
           find ../XeniOS -type f \( \
             -name "libMoltenVK.a" -o \
             -name "libMoltenVK_ShaderConverter.a" -o \
@@ -59,21 +68,21 @@ jobs:
           mkdir -p ../XeniOS/build-ios-xcode/obj/iOS/Release
 
           find ../XeniOS -type f -name "libMoltenVK.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \; || true
+            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
 
           find ../XeniOS -type f -name "libMoltenVK_ShaderConverter.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \; || true
+            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
 
           find ../XeniOS -type f -name "libMoltenVK_Common.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \; || true
+            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
 
           find ../XeniOS -type f -name "libspirv-cross.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \; || true
+            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
 
           find ../XeniOS -type f -name "libSPIRV-Tools.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \; || true
+            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
 
-      - name: Check required libraries
+      - name: Check XeniOS libraries
         run: |
           ls -lh ../XeniOS/build-ios-xcode/obj/iOS/Release/
 
