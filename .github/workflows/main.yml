@@ -15,6 +15,7 @@ jobs:
 
       - name: Install Theft4 dependencies
         run: |
+          python3 tools/setup_repo.py
           python3 tools/setup_repo.py --check
 
       - name: Clone XeniOS
