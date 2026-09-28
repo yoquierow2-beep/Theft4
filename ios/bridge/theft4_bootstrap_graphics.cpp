@@ -468,8 +468,8 @@ theft4_create_bootstrap_graphics() {
   // not persistent across later icon launches, so requiring an opt-in here
   // silently returned manual Release launches to the much slower generic
   // Xenos translator. Keep the generic renderer as an explicit recovery path.
-  const char* backend = std::getenv("THEFT4_GRAPHICS_BACKEND");
-  const bool force_generic = backend && std::string_view(backend) == "generic";
+  const bool force_generic = true;
+    
   if (!force_generic) {
     if (auto native = theft4_create_gta4_native_graphics()) {
       REXLOG_INFO("Theft4 selected the GTA IV native renderer");
