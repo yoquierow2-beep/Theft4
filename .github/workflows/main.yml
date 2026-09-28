@@ -1,0 +1,36 @@
+name: Build Theft4 Generic Renderer IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          python3 tools/setup_repo.py
+          python3 tools/setup_repo.py --check
+
+      - name: Build Theft4 Release IPA
+        run: |
+          chmod +x tools/build_ios_release.sh
+          ./tools/build_ios_release.sh
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Theft4-generic-renderer
+          path: dist/*.ipa
+
+      - name: Upload SHA256
+        uses: actions/upload-artifact@v4
+        with:
+          name: Theft4-generic-renderer-sha256
+          path: dist/*.sha256
