@@ -1,42 +1,72 @@
 name: Build Theft4 Generic Renderer IPA
-
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: macos-latest
-
     steps:
       - name: Checkout Theft4
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
+      - name: Show toolchain
+        run: |
+          set -euxo pipefail
+          sw_vers
+          xcodebuild -version
+          cmake --version
+          python3 --version
+          uname -m
       - name: Install Theft4 dependencies
         run: |
+          set -euxo pipefail
           python3 tools/setup_repo.py
           python3 tools/setup_repo.py --check
-
       - name: Clone XeniOS
         run: |
+          set -euxo pipefail
           git clone --depth 1 --branch xenios https://github.com/xenios-jp/XeniOS.git ../XeniOS
-
       - name: Initialize XeniOS submodules
         run: |
+          set -euxo pipefail
           cd ../XeniOS
           git submodule sync --recursive
           git submodule update --init --recursive --depth 1
-
       - name: Fetch XeniOS data
         run: |
+          set -euxo pipefail
           cd ../XeniOS
           python3 xenia-build.py fetchdata
-
-      - name: Configure XeniOS iOS
+      # ------------------------------------------------------------
+      # IMPORTANT:
+      # XeniOS iOS configuration requires a NATIVE macOS
+      # xenia-shader-cc BEFORE CMake configures the iOS target.
+      # ------------------------------------------------------------
+      - name: Build native macOS xenia-shader-cc
         run: |
+          set -euxo pipefail
           cd ../XeniOS
-
+          echo "===== BUILD NATIVE macOS xenia-shader-cc ====="
+          ./xb build \
+            --target=xenia-shader-cc \
+            --config=Release
+          echo "===== SEARCHING FOR HOST TOOL ====="
+          find build -type f \
+            \( -name "xenia-shader-cc" -o -name "xenia-shader-cc.exe" \) \
+            -print
+          test -f build/host_tools/Release/xenia-shader-cc
+          chmod +x build/host_tools/Release/xenia-shader-cc
+          echo "===== HOST TOOL READY ====="
+          ls -lh build/host_tools/Release/xenia-shader-cc
+      # ------------------------------------------------------------
+      # Configure iOS AFTER the native host tool exists.
+      # Explicit Release avoids CMake falling back to Debug.
+      # ------------------------------------------------------------
+      - name: Configure XeniOS iOS Release
+        run: |
+          set -euxo pipefail
+          cd ../XeniOS
+          rm -rf build-ios-xcode
           cmake \
             -S . \
             -B build-ios-xcode \
@@ -46,26 +76,26 @@ jobs:
             -DCMAKE_OSX_SYSROOT=iphoneos \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY \
+            -DCMAKE_BUILD_TYPE=Release \
             -DXENIA_ENABLE_IOS_MOLTENVK=ON \
-            -DCMAKE_CONFIGURATION_TYPES="Checked;Debug;Release" \
+            -DCMAKE_CONFIGURATION_TYPES="Release" \
             -DCMAKE_XCODE_GENERATE_SCHEME=ON
-
       - name: Build XeniOS iOS Release
         run: |
+          set -euxo pipefail
           cd ../XeniOS
-
           xcodebuild \
             -project build-ios-xcode/xenia.xcodeproj \
             -scheme xenia-app \
             -configuration Release \
             -destination "generic/platform=iOS" \
             CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
             build
-
       - name: Find XeniOS libraries
         run: |
+          set -euxo pipefail
           echo "===== LIBRERIAS ENCONTRADAS ====="
-
           find ../XeniOS -type f \( \
             -name "libMoltenVK.a" -o \
             -name "libMoltenVK_ShaderConverter.a" -o \
@@ -73,52 +103,52 @@ jobs:
             -name "libspirv-cross.a" -o \
             -name "libSPIRV-Tools.a" \
           \) -print
-
       - name: Prepare Theft4 dependencies
         run: |
+          set -euxo pipefail
           mkdir -p ../XeniOS/build-ios-xcode/obj/iOS/Release
-
           find ../XeniOS -type f -name "libMoltenVK.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
-
+            -exec cp -f {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
           find ../XeniOS -type f -name "libMoltenVK_ShaderConverter.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
-
+            -exec cp -f {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
           find ../XeniOS -type f -name "libMoltenVK_Common.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
-
+            -exec cp -f {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
           find ../XeniOS -type f -name "libspirv-cross.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
-
+            -exec cp -f {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
           find ../XeniOS -type f -name "libSPIRV-Tools.a" \
-            -exec cp {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
-
+            -exec cp -f {} ../XeniOS/build-ios-xcode/obj/iOS/Release/ \;
       - name: Check Theft4 dependencies
         run: |
+          set -euxo pipefail
           echo "===== COMPROBANDO LAS 5 LIBRERIAS ====="
-
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libMoltenVK.a
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libMoltenVK_ShaderConverter.a
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libMoltenVK_Common.a
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libspirv-cross.a
           test -f ../XeniOS/build-ios-xcode/obj/iOS/Release/libSPIRV-Tools.a
-
           echo "===== LAS 5 LIBRERIAS ESTAN ====="
           ls -lh ../XeniOS/build-ios-xcode/obj/iOS/Release/
-
       - name: Build Theft4 IPA
         run: |
+          set -euxo pipefail
           chmod +x tools/build_ios_release.sh
           ./tools/build_ios_release.sh
-
+      - name: Verify IPA
+        run: |
+          set -euxo pipefail
+          echo "===== IPA GENERADA ====="
+          find dist -maxdepth 1 -type f -name "*.ipa" -print
+          test -n "$(find dist -maxdepth 1 -type f -name '*.ipa' -print -quit)"
+          ls -lh dist/*.ipa
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Theft4-generic-renderer
           path: dist/*.ipa
-
+          if-no-files-found: error
       - name: Upload SHA256
         uses: actions/upload-artifact@v4
         with:
           name: Theft4-generic-renderer-sha256
           path: dist/*.sha256
+          if-no-files-found: warn    
